@@ -1,0 +1,1 @@
+sniffer.exe | WiresharkPortable\APP\Wireshark\Wireshark.exe -l -k -i -
