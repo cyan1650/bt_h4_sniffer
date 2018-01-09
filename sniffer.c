@@ -4,8 +4,8 @@
 
  Compile: gcc -o sniffer sniffer.c
  Run:
- $ ./sniffer | wireshark -k -i -
- $ ./sniffer -w filename
+ $ ./sniffer -A ttyS19 -B tty20 -b 115200 | wireshark -k -i -
+ $ ./sniffer -A ttyS19 -B tty20 -w filename
  */
 
 #include <stdio.h>
@@ -48,7 +48,7 @@ struct pollfd pfd[RX_LINES] =
  * The baud rate in bps.
  */
 //#define TTY_BAUDRATE B3000000 //3Mbps
-uint32_t TTY_BAUDRATE = 115200; //115200
+uint32_t TTY_BAUDRATE = 115200; //default baud rate:115200
 
 /*
  * Connect to a serial port.
@@ -448,6 +448,15 @@ int read_packet(int index)
      }
     }else
      printf("controller baud update fail eventcode:%d ret:%d!\r\n",buf[index][1]==0x0e,buf[index][6]==0x00);
+  }
+
+  else if( buf[index][0]==HCI_EVENT_PKT && buf[index][1]==0x0e && buf[index][2]==04 && buf[index][3]==0x01 && 
+           buf[index][4]==0x4e          && buf[index][5]==0xFC && buf[index][6]==0x00 )
+  {
+       printf("download fw finish,reboot \r\n");
+       serial_close(pfd[0].fd);
+       serial_close(pfd[1].fd);
+       serial_reopen(115200); //default baudrate
   }
 
   pcapwriter_write(tv+index, direction[index], length, buf[index]);
