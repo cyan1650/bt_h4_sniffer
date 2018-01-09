@@ -34,6 +34,16 @@ int debug = 0;
 uint8_t port1[256]= "/dev/ttyS0";
 uint8_t port2[256]= "/dev/ttyS1";
 
+#define RX_LINES 2
+#define BUFFER_SIZE 8192
+
+
+struct pollfd pfd[RX_LINES] =
+{
+  {.fd = -1, .events = POLLIN},
+  {.fd = -1, .events = POLLIN},
+};
+
 /*
  * The baud rate in bps.
  */
@@ -81,6 +91,23 @@ int serial_connect(char* portname,uint32_t baud)
   }
 
   return fd;
+}
+
+void serial_reopen(uint32_t baud)
+{
+  int fd1 = serial_connect(port1,baud);
+  if(fd1 < 0)
+  {
+    exit(-1);
+  }
+  pfd[0].fd=fd1;
+
+  int fd2 = serial_connect(port2,baud);
+  if(fd1 < 0)
+  {
+    exit(-1);
+  }
+  pfd[1].fd=fd2;
 }
 
 void serial_close(int fd)
@@ -259,15 +286,13 @@ void terminate(int sig)
 #define HCI_EVENT_PKT           0x04
 #define HCI_VENDOR_PKT          0xff
 
-#define RX_LINES 2
-#define BUFFER_SIZE 8192
-
 unsigned char buf[RX_LINES][BUFFER_SIZE] = {};
 unsigned int direction[RX_LINES] = {};
 int last[RX_LINES] = {};
 struct timeval tv[RX_LINES] = {};
 
 const uint32_t posix_std_baud[] ={0,50,75,110,134,150,200,300,600,1200,1800,2400,4800,9600,19200,38400,}; /*the POSIX std*/
+
 
 int check_baudrate_is_ext_baud(uint32_t baudrate, uint32_t * new_baudrate)
 {
@@ -402,19 +427,27 @@ int read_packet(int index)
 
   if(buf[index][0]==HCI_COMMAND_PKT && buf[index][1]==0x18 && buf[index][2]==0xfc && buf[index][3]==0x06 )
   {
+     //buf[index][4];
+     //buf[index][5];
      hci_cmd_new_baudrate=buf[index][6];
      hci_cmd_new_baudrate+=buf[index][7]<<8;
      hci_cmd_new_baudrate+=buf[index][8]<<16;
      printf("host cmd baud update:%x %d\r\n",hci_cmd_new_baudrate,hci_cmd_new_baudrate);
   }
 
-  else if( buf[index][0]==HCI_EVENT_PKT && buf[index][2]==0x04 && buf[index][3]==0x18 && buf[index][4]==0xFC && buf[index][5]==0x00 )
+  else if( buf[index][0]==HCI_EVENT_PKT && buf[index][2]==0x04 && buf[index][3]==01 && buf[index][4]==0x18 && buf[index][5]==0xFC )
   {
-    if(buf[index][1]==0x0e)
+    if(buf[index][1]==0x0e && buf[index][6]==0x00 )
     {
      printf("controller baud update success!\r\n");
+     if(hci_cmd_new_baudrate)
+     {
+       serial_close(pfd[0].fd);
+       serial_close(pfd[1].fd);
+       serial_reopen(hci_cmd_new_baudrate);
+     }
     }else
-     printf("controller baud update fail %d!\r\n",buf[index][1]==0x0e);
+     printf("controller baud update fail eventcode:%d ret:%d!\r\n",buf[index][1]==0x0e,buf[index][6]==0x00);
   }
 
   pcapwriter_write(tv+index, direction[index], length, buf[index]);
@@ -446,20 +479,17 @@ int main(int argc, char* argv[])
   {
     exit(-1);
   }
+  pfd[0].fd=fd1;
 
   int fd2 = serial_connect(port2,TTY_BAUDRATE);
   if(fd1 < 0)
   {
     exit(-1);
   }
+  pfd[1].fd=fd2;
   
   pcapwriter_init(argv[1]);
 
-  struct pollfd pfd[RX_LINES] =
-  {
-      {.fd = fd1, .events = POLLIN},
-      {.fd = fd2, .events = POLLIN},
-  };
 
   int res;
   int i;
@@ -515,8 +545,8 @@ int main(int argc, char* argv[])
 
   pcapwriter_close();
 
-  serial_close(fd1);
-  serial_close(fd2);
+  serial_close(pfd[0].fd);
+  serial_close(pfd[1].fd);
 
   return 0;
 }
