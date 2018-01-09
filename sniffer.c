@@ -229,7 +229,7 @@ void pcapwriter_write(struct timeval* tv, unsigned int direction, unsigned short
 
 static void usage()
 {
-  fprintf(stderr, "Usage: sniffer [-w filename] [-D] [-A] [-B] [-b]\n");
+  fprintf(stderr, "Usage: sniffer <-A ttyNum> <-B ttyNum> [-w filename] [-D] [-b default_baudrate]\n");
   exit(EXIT_FAILURE);
 }
 
@@ -241,6 +241,9 @@ static void usage()
 static void read_args(int argc, char* argv[])
 {
   int opt;
+
+  if(argc<5)
+     usage();
 
   while ((opt = getopt(argc, argv, "w:A:B:b:D")) != EOF)
   {
@@ -256,12 +259,10 @@ static void read_args(int argc, char* argv[])
       case 'A':
 	    snprintf(port1,sizeof(port1),"%s%s","/dev/",optarg);
         fprintf(stdout, "PortA:%s\r\n", port1);
-        //printf("%s\r\n",port1);
         break;
       case 'B':
 	    snprintf(port2,sizeof(port2),"%s%s","/dev/",optarg);
         fprintf(stdout, "PortB:%s\r\n", port2);
-        //printf("%s\r\n",port2);
      case 'b':
         TTY_BAUDRATE = atoi(optarg);
         printf("%d\r\n",TTY_BAUDRATE);
@@ -471,8 +472,6 @@ int read_packet(int index)
 int main(int argc, char* argv[])
 {
   (void) signal(SIGINT, terminate);
-
-    printf("HELLO world\r\n");
 
   struct sched_param p =
   {
